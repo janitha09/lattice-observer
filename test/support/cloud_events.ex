@@ -47,9 +47,10 @@ defmodule TestSupport.CloudEvents do
     |> LatticeObserver.CloudEvent.new("actor_stopped", host)
   end
 
-  def host_started(host, labels) do
+  def host_started(host, labels, friendly_name \\ "default-runner-1") do
     %{
-      "labels" => labels
+      "labels" => labels,
+      "friendly_name" => friendly_name
     }
     |> LatticeObserver.CloudEvent.new("host_started", host)
   end
@@ -102,10 +103,10 @@ defmodule TestSupport.CloudEvents do
     |> LatticeObserver.CloudEvent.new("provider_stopped", host)
   end
 
-  def host_heartbeat(host, labels) do
+  def host_heartbeat(host, labels, actors \\ [], providers \\ []) do
     %{
-      "actors" => [],
-      "providers" => [],
+      "actors" => actors,
+      "providers" => providers,
       "labels" => labels
     }
     |> LatticeObserver.CloudEvent.new("host_heartbeat", host)
@@ -119,7 +120,7 @@ defmodule TestSupport.CloudEvents do
       "contract_id" => contract_id,
       "values" => values
     }
-    |> LatticeObserver.CloudEvent.new("linkdef_put", host)
+    |> LatticeObserver.CloudEvent.new("linkdef_set", host)
   end
 
   def linkdef_del(actor_id, provider_id, link_name, contract_id, host) do
@@ -129,6 +130,26 @@ defmodule TestSupport.CloudEvents do
       "link_name" => link_name,
       "contract_id" => contract_id
     }
-    |> LatticeObserver.CloudEvent.new("linkdef_del", host)
+    |> LatticeObserver.CloudEvent.new("linkdef_deleted", host)
+  end
+
+  def invocation_succeeded(from = %{}, to = %{}, bytes, operation, host) do
+    %{
+      "source" => from,
+      "dest" => to,
+      "operation" => operation,
+      "bytes" => bytes
+    }
+    |> LatticeObserver.CloudEvent.new("invocation_succeeded", host)
+  end
+
+  def invocation_failed(from = %{}, to = %{}, bytes, operation, host) do
+    %{
+      "source" => from,
+      "dest" => to,
+      "operation" => operation,
+      "bytes" => bytes
+    }
+    |> LatticeObserver.CloudEvent.new("invocation_failed", host)
   end
 end

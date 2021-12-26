@@ -1,6 +1,6 @@
 defmodule LatticeObserverTest.Observed.HostsTest do
   use ExUnit.Case
-  alias LatticeObserver.Observed.Lattice
+  alias LatticeObserver.Observed.{Lattice, EventProcessor}
   alias TestSupport.CloudEvents
 
   @test_host "Nxxx"
@@ -11,13 +11,15 @@ defmodule LatticeObserverTest.Observed.HostsTest do
       started =
         CloudEvents.host_started(
           @test_host,
-          %{test: "yes"}
+          %{test: "yes"},
+          "orange-pelican-5"
         )
 
       started2 =
         CloudEvents.host_started(
           @test_host2,
-          %{test: "maybe"}
+          %{test: "maybe"},
+          "yellow-cat-6"
         )
 
       actor1 = CloudEvents.actor_started("Mxxx", "abc123", "none", @test_host)
@@ -45,6 +47,7 @@ defmodule LatticeObserverTest.Observed.HostsTest do
         |> Lattice.apply_event(host1_stop)
 
       assert Map.keys(l.hosts) == ["Nxxxy"]
+      assert (l.hosts |> Map.values() |> List.first()).friendly_name == "yellow-cat-6"
       assert Map.keys(l.instance_tracking) == ["abc123", "abc456", "abc789"]
       assert l.providers == %{}
       assert l.actors == %{}
@@ -54,10 +57,11 @@ defmodule LatticeObserverTest.Observed.HostsTest do
       started =
         CloudEvents.host_started(
           @test_host,
-          %{test: "yes"}
+          %{test: "yes"},
+          "active-racoon-1"
         )
 
-      stamp = Lattice.timestamp_from_iso8601(started.time)
+      stamp = EventProcessor.timestamp_from_iso8601(started.time)
 
       l = Lattice.apply_event(Lattice.new(), started)
       assert l.hosts[@test_host].status == :healthy
@@ -72,7 +76,7 @@ defmodule LatticeObserverTest.Observed.HostsTest do
 
     test "Properly records host heartbeat" do
       hb = CloudEvents.host_heartbeat(@test_host, %{foo: "bar", baz: "biz"})
-      stamp = Lattice.timestamp_from_iso8601(hb.time)
+      stamp = EventProcessor.timestamp_from_iso8601(hb.time)
       l = Lattice.apply_event(Lattice.new(), hb)
 
       assert l.hosts[@test_host].labels == %{baz: "biz", foo: "bar"}
@@ -80,12 +84,98 @@ defmodule LatticeObserverTest.Observed.HostsTest do
       assert l.hosts[@test_host].last_seen == stamp
 
       hb2 = CloudEvents.host_heartbeat(@test_host, %{foo: "bar", baz: "biz"})
-      stamp2 = Lattice.timestamp_from_iso8601(hb2.time)
+      stamp2 = EventProcessor.timestamp_from_iso8601(hb2.time)
       l = Lattice.apply_event(l, hb2)
 
       assert l.hosts[@test_host].labels == %{baz: "biz", foo: "bar"}
       assert l.hosts[@test_host].status == :healthy
       assert l.hosts[@test_host].last_seen == stamp2
+
+      hb3 =
+        CloudEvents.host_heartbeat(
+          @test_host,
+          %{foo: "bar"},
+          [
+            %{
+              "public_key" => "Mxxxx",
+              "instance_id" => "iid1"
+            },
+            %{
+              "public_key" => "Mxxxy",
+              "instance_id" => "iid2"
+            }
+          ],
+          [
+            %{
+              "public_key" => "Vxxxxx",
+              "instance_id" => "iid3",
+              "contract_id" => "wasmcloud:test",
+              "link_name" => "default"
+            }
+          ]
+        )
+
+      l = Lattice.apply_event(Lattice.new(), hb3)
+
+      assert l.actors == %{
+               "Mxxxx" => %LatticeObserver.Observed.Actor{
+                 call_alias: "",
+                 capabilities: [],
+                 id: "Mxxxx",
+                 instances: [
+                   %LatticeObserver.Observed.Instance{
+                     host_id: "Nxxx",
+                     id: "iid1",
+                     revision: 0,
+                     spec_id: "",
+                     version: ""
+                   }
+                 ],
+                 issuer: "",
+                 name: "unavailable",
+                 tags: [],
+                 version: nil
+               },
+               "Mxxxy" => %LatticeObserver.Observed.Actor{
+                 call_alias: "",
+                 capabilities: [],
+                 id: "Mxxxy",
+                 instances: [
+                   %LatticeObserver.Observed.Instance{
+                     host_id: "Nxxx",
+                     id: "iid2",
+                     revision: 0,
+                     spec_id: "",
+                     version: ""
+                   }
+                 ],
+                 issuer: "",
+                 name: "unavailable",
+                 tags: [],
+                 version: nil
+               }
+             }
+
+      assert l.providers == %{
+               {"Vxxxxx", "default"} => %LatticeObserver.Observed.Provider{
+                 contract_id: "wasmcloud:test",
+                 id: "Vxxxxx",
+                 instances: [
+                   %LatticeObserver.Observed.Instance{
+                     host_id: "Nxxx",
+                     id: "iid3",
+                     revision: 0,
+                     spec_id: "",
+                     version: ""
+                   }
+                 ],
+                 issuer: "",
+                 link_name: "default",
+                 name: "unavailable",
+                 tags: [],
+                 version: nil
+               }
+             }
     end
   end
 end
